@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 足球預測與模擬投注系統 (全球多聯賽高勝率版)</title>
+  <title>AI 足球預測與模擬投注系統 (多聯賽高勝率版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -13,7 +13,7 @@
     <div class="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-3">
       <div class="flex items-center space-x-2">
         <span class="text-2xl">⚽</span>
-        <h1 class="font-bold text-lg text-emerald-400">AI Football Vision (Global Leagues)</h1>
+        <h1 class="font-bold text-lg text-emerald-400">AI Football Vision (Multi-League)</h1>
       </div>
       
       <!-- 訪客錢包與戰績看板 -->
@@ -37,28 +37,16 @@
     </div>
   </header>
 
-  <!-- 主內容導航列 -->
+  <!-- 主內容區 -->
   <main class="max-w-6xl mx-auto p-4 space-y-6">
 
     <!-- 狀態列 -->
     <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
       <div class="text-sm">
         <span class="font-bold text-emerald-400">🟢 The Odds API 多聯賽已連線：</span>
-        <span class="text-slate-300">正在同步英超、德甲、西甲、意甲等全球賽程...</span>
+        <span class="text-slate-300">正在同步英超、德甲、西甲、意甲等高勝率賽程與賠率...</span>
       </div>
-      <button onclick="fetchAllLeaguesOdds()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-sm font-bold text-white transition">重新整理</button>
-    </div>
-
-    <!-- 聯賽快速切換列 -->
-    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 space-y-2">
-      <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">🏆 選擇聯賽 (高可預測性推薦)</div>
-      <div id="league-filter-container" class="flex flex-wrap gap-2">
-        <button onclick="changeLeague('all', '全部聯賽')" class="league-btn bg-emerald-600 px-3 py-1.5 rounded-lg text-xs font-bold transition">全部聯賽</button>
-        <button onclick="changeLeague('soccer_epl', '英格蘭超級聯賽')" class="league-btn bg-slate-900 text-slate-300 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition">英超 (EPL)</button>
-        <button onclick="changeLeague('soccer_germany_bundesliga', '德國甲組聯賽')" class="league-btn bg-slate-900 text-slate-300 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition">德甲 (高進球)</button>
-        <button onclick="changeLeague('soccer_spain_la_liga', '西班牙甲組聯賽')" class="league-btn bg-slate-900 text-slate-300 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition">西甲 (La Liga)</button>
-        <button onclick="changeLeague('soccer_italy_serie_a', '意大利甲組聯賽')" class="league-btn bg-slate-900 text-slate-300 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition">意甲 (Serie A)</button>
-      </div>
+      <button onclick="fetchRealOdds()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-sm font-bold text-white transition">重新整理</button>
     </div>
 
     <!-- 未來一星期日期篩選列 -->
@@ -81,15 +69,18 @@
         <select id="sort-select" onchange="renderMatches()" class="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none">
           <option value="time-asc">開賽時間 (由近至遠)</option>
           <option value="winrate-desc">AI 勝率 (由高至低)</option>
+          <option value="winrate-asc">AI 勝率 (由低至高)</option>
           <option value="ev-desc">期望值 EV (由高至低)</option>
+          <option value="ev-asc">期望值 EV (由高至低)</option>
           <option value="odds-desc">賠率 (由高至低)</option>
+          <option value="odds-asc">賠率 (由低至高)</option>
         </select>
       </div>
     </div>
 
     <!-- 賽事容器 -->
     <div id="matches-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="col-span-full text-center py-12 text-slate-400">⏳ 正在載入全球多聯賽賽程數據...</div>
+      <div class="col-span-full text-center py-12 text-slate-400">⏳ 正在載入多聯賽賽程數據...</div>
     </div>
 
   </main>
@@ -122,20 +113,22 @@
         <h3 class="text-lg font-bold text-emerald-400">我的模擬投注紀錄</h3>
         <button onclick="toggleBetsModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
-      <div id="bets-container" class="overflow-y-auto space-y-2 flex-1 text-sm"></div>
+      <div id="bets-container" class="overflow-y-auto space-y-2 flex-1 text-sm">
+        <!-- 動態注單 -->
+      </div>
     </div>
   </div>
 
   <script>
     const API_KEY = "58a3c6120277a039a3de0160dd54f381";
-    let allMatchesData = [];
-    let currentLeagueKey = 'all';
+    let realMatchesData = [];
     let currentMarket = 'ALL';
     let currentDateFilter = 'ALL';
     let userState = JSON.parse(localStorage.getItem('paper_wallet')) || { balance: 10000, bets: [] };
     let selectedBetTarget = null;
 
-    const leaguesConfig = [
+    // 高可預測性聯賽清單
+    const targetLeagues = [
       { key: 'soccer_epl', name: '英超 (EPL)' },
       { key: 'soccer_germany_bundesliga', name: '德甲 (Bundesliga)' },
       { key: 'soccer_spain_la_liga', name: '西甲 (La Liga)' },
@@ -161,6 +154,7 @@
       document.getElementById('user-roi').innerText = `${roi}%`;
     }
 
+    // 格式化日期時間 (例如: 11/08 23:00)
     function formatMatchTime(isoString) {
       const date = new Date(isoString);
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -174,6 +168,7 @@
       };
     }
 
+    // 動態生成未來 7 天的日期按鈕
     function buildDateFilterUI() {
       const container = document.getElementById('date-filter-container');
       container.innerHTML = '';
@@ -188,6 +183,7 @@
       for (let i = 0; i < 7; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
+        
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         const dateKey = `${d.getFullYear()}-${month}-${day}`;
@@ -211,22 +207,13 @@
       renderMatches();
     }
 
-    function changeLeague(leagueKey, leagueName) {
-      currentLeagueKey = leagueKey;
-      document.querySelectorAll('.league-btn').forEach(btn => {
-        btn.className = 'league-btn bg-slate-900 text-slate-300 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition';
-      });
-      event.target.className = 'league-btn bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition';
-      renderMatches();
-    }
-
-    async function fetchAllLeaguesOdds() {
+    async function fetchRealOdds() {
       const container = document.getElementById('matches-container');
-      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在並行載入多個頂級職業聯賽賠率資料...</div>`;
+      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在同步高勝率聯賽賽程與賠率...</div>`;
 
-      allMatchesData = [];
+      realMatchesData = [];
       try {
-        const promises = leaguesConfig.map(async (league) => {
+        const promises = targetLeagues.map(async (league) => {
           try {
             const res = await fetch(`https://api.the-odds-api.com/v4/sports/${league.key}/odds/?apiKey=${API_KEY}&regions=uk&markets=h2h`);
             if (!res.ok) return [];
@@ -242,14 +229,14 @@
           matchesList.forEach(match => processMatchData(match));
         });
 
-        if (allMatchesData.length === 0) {
-          container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前各聯賽暫無未來賽事數據。</div>`;
+        if (realMatchesData.length === 0) {
+          container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前各聯賽暫無未來賽事賠率數據。</div>`;
           return;
         }
 
         renderMatches();
       } catch (err) {
-        container.innerHTML = `<div class="col-span-full text-red-400 text-center py-12">載入錯誤: ${err.message}</div>`;
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-red-400">載入錯誤: ${err.message}</div>`;
       }
     }
 
@@ -266,7 +253,6 @@
 
       const options = h2h.outcomes.map(o => {
         const rawProb = (1 / o.price) / totalImplied;
-        // 針對德甲等進攻型聯賽賦予更高預測權重補正
         const multiplier = match.leagueKey === 'soccer_germany_bundesliga' ? 1.08 : 1.05;
         const winRate = Math.min(0.88, Math.max(0.20, rawProb * multiplier));
         return {
@@ -277,10 +263,9 @@
         };
       });
 
-      allMatchesData.push({
+      realMatchesData.push({
         id: match.id,
         league: match.leagueMetaName,
-        leagueKey: match.leagueKey,
         home: match.home_team,
         away: match.away_team,
         timeDisplay: timeInfo.formatted,
@@ -303,8 +288,7 @@
       container.innerHTML = '';
 
       let items = [];
-      allMatchesData.forEach(m => {
-        if (currentLeagueKey !== 'all' && m.leagueKey !== currentLeagueKey) return;
+      realMatchesData.forEach(m => {
         if (currentDateFilter !== 'ALL' && m.dateKey !== currentDateFilter) return;
 
         m.options.forEach(opt => {
@@ -327,12 +311,15 @@
       items.sort((a, b) => {
         if (sortType === 'time-asc') return a.timestamp - b.timestamp;
         if (sortType === 'winrate-desc') return b.winRate - a.winRate;
+        if (sortType === 'winrate-asc') return a.winRate - b.winRate;
         if (sortType === 'ev-desc') return b.ev - a.ev;
+        if (sortType === 'ev-asc') return a.ev - b.ev;
         if (sortType === 'odds-desc') return b.odds - a.odds;
+        if (sortType === 'odds-asc') return a.odds - b.odds;
       });
 
       if (items.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前選擇的條件下無符合賽事</div>`;
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前選擇的日期無符合條件之賽事</div>`;
         return;
       }
 
@@ -428,9 +415,10 @@
       }
     }
 
+    // 初始化執行
     buildDateFilterUI();
     updateWalletUI();
-    fetchAllLeaguesOdds();
+    fetchRealOdds();
   </script>
 </body>
 </html>
