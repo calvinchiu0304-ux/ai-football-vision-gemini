@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 足球預測與模擬投注系統 (The Odds API 真實數據版)</title>
+  <title>AI 足球預測與模擬投注系統 (即時數據版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
 
+  <!-- 頂部導航與個人戰績 -->
   <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50 px-4 py-3">
     <div class="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-3">
       <div class="flex items-center space-x-2">
@@ -15,6 +16,7 @@
         <h1 class="font-bold text-lg text-emerald-400">AI Football Vision (Live Odds)</h1>
       </div>
       
+      <!-- 訪客錢包與戰績看板 -->
       <div class="flex items-center space-x-4 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-xs sm:text-sm">
         <div>
           <span class="text-slate-400">虛擬餘額:</span>
@@ -35,13 +37,14 @@
     </div>
   </header>
 
+  <!-- 主內容區 -->
   <main class="max-w-6xl mx-auto p-4 space-y-6">
 
     <!-- 狀態列 -->
     <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
       <div class="text-sm">
-        <span class="font-bold text-emerald-400">🟢 The Odds API 金鑰已載入：</span>
-        <span class="text-slate-300">正在從全球博彩公司同步即時英超賠率...</span>
+        <span class="font-bold text-emerald-400">🟢 The Odds API 金鑰已連線：</span>
+        <span class="text-slate-300">正在同步全球即時英超賠率...</span>
       </div>
       <button onclick="fetchRealOdds()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg text-sm font-bold text-white transition">重新整理</button>
     </div>
@@ -66,131 +69,71 @@
       </div>
     </div>
 
+    <!-- 賽事容器 -->
     <div id="matches-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="col-span-full text-center py-12 text-slate-400">⏳ 正在連線 The Odds API...</div>
+      <div class="col-span-full text-center py-12 text-slate-400">⏳ 正在載入即時賽事...</div>
     </div>
 
   </main>
 
+  <!-- 模擬投注 Modal -->
+  <div id="bet-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 max-w-md w-full space-y-4">
+      <h3 class="text-lg font-bold text-emerald-400">建立模擬投注</h3>
+      <div class="space-y-2 text-sm text-slate-300">
+        <p>賽事: <span id="modal-match-title" class="text-white font-semibold"></span></p>
+        <p>選擇項目: <span id="modal-market-option" class="text-amber-400 font-semibold"></span></p>
+        <p>即時賠率: <span id="modal-odds" class="text-emerald-400 font-bold"></span></p>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">下注金額 (虛擬幣)</label>
+        <input type="number" id="bet-amount" value="500" min="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeBetModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
+        <button onclick="submitBet()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-bold">確認下注</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 我的注單 Modal -->
+  <div id="bets-list-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 max-w-xl w-full space-y-4 max-h-[80vh] flex flex-col">
+      <div class="flex justify-between items-center">
+        <h3 class="text-lg font-bold text-emerald-400">我的模擬投注紀錄</h3>
+        <button onclick="toggleBetsModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <div id="bets-container" class="overflow-y-auto space-y-2 flex-1 text-sm">
+        <!-- 動態注單 -->
+      </div>
+    </div>
+  </div>
+
   <script>
-    // 直接內建你的 The Odds API 金鑰
     const API_KEY = "58a3c6120277a039a3de0160dd54f381";
     let realMatchesData = [];
     let currentMarket = 'ALL';
     let userState = JSON.parse(localStorage.getItem('paper_wallet')) || { balance: 10000, bets: [] };
+    let selectedBetTarget = null;
+
+    function saveUserState() {
+      localStorage.setItem('paper_wallet', JSON.stringify(userState));
+      updateWalletUI();
+    }
+
+    function updateWalletUI() {
+      document.getElementById('user-balance').innerText = `$${userState.balance.toLocaleString()}`;
+      const settled = userState.bets.filter(b => b.status !== 'pending');
+      const wins = settled.filter(b => b.status === 'won').length;
+      const winRate = settled.length ? Math.round((wins / settled.length) * 100) : 0;
+      
+      const totalStaked = settled.reduce((acc, b) => acc + b.amount, 0);
+      const totalProfit = settled.reduce((acc, b) => acc + (b.profit || 0), 0);
+      const roi = totalStaked ? Math.round((totalProfit / totalStaked) * 100) : 0;
+
+      document.getElementById('user-winrate').innerText = `${winRate}\%`; document.getElementById('user-roi').innerText = `${roi}%`;
+    }
 
     async function fetchRealOdds() {
       const container = document.getElementById('matches-container');
-      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在向 The Odds API 請求即時賠率...</div>`;
-
-      try {
-        const response = await fetch(`https://api.the-odds-api.com/v4/sports/soccer_epl/odds/?apiKey=${API_KEY}&regions=uk&markets=h2h`);
-        if (!response.ok) throw new Error('API 請求失敗，請檢查金鑰或配額');
-        
-        const data = await response.json();
-        if (!data || data.length === 0) {
-          container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前英超暫無賽事賠率數據。</div>`;
-          return;
-        }
-
-        processRealData(data);
-      } catch (err) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-red-400">載入錯誤: ${err.message}</div>`;
-      }
-    }
-
-    function processRealData(matches) {
-      realMatchesData = [];
-      matches.forEach(match => {
-        const bookmaker = match.bookmakers[0];
-        if (!bookmaker) return;
-        const h2h = bookmaker.markets.find(m => m.key === 'h2h');
-        if (!h2h) return;
-
-        let totalImplied = 0;
-        h2h.outcomes.forEach(o => totalImplied += (1 / o.price));
-
-        const options = h2h.outcomes.map(o => {
-          const rawProb = (1 / o.price) / totalImplied;
-          const winRate = Math.min(0.85, Math.max(0.25, rawProb * 1.05)); // AI 權重運算
-          return {
-            market: '1X2',
-            name: `${o.name} 勝`,
-            odds: o.price,
-            winRate: winRate
-          };
-        });
-
-        realMatchesData.push({
-          id: match.id,
-          league: '英超 (Live 賠率)',
-          home: match.home_team,
-          away: match.away_team,
-          options
-        });
-      });
-
-      renderMatches();
-    }
-
-    function renderMatches() {
-      const container = document.getElementById('matches-container');
-      const sortType = document.getElementById('sort-select').value;
-      container.innerHTML = '';
-
-      let items = [];
-      realMatchesData.forEach(m => {
-        m.options.forEach(opt => {
-          if (currentMarket === 'ALL' || opt.market === currentMarket) {
-            const ev = (opt.winRate * opt.odds) - 1;
-            const isValue = opt.winRate >= 0.70 && ev >= 0.10;
-            items.push({ ...opt, matchTitle: `${m.home} vs ${m.away}`, league: m.league, ev, isValue });
-          }
-        });
-      });
-
-      items.sort((a, b) => {
-        if (sortType === 'winrate-desc') return b.winRate - a.winRate;
-        if (sortType === 'winrate-asc') return a.winRate - b.winRate;
-        if (sortType === 'ev-desc') return b.ev - a.ev;
-        if (sortType === 'ev-asc') return a.ev - b.ev;
-        if (sortType === 'odds-desc') return b.odds - a.odds;
-        if (sortType === 'odds-asc') return a.odds - b.odds;
-      });
-
-      if (items.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前沒有符合條件的賽事</div>`;
-        return;
-      }
-
-      items.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col justify-between space-y-3';
-        card.innerHTML = `
-          <div class="flex justify-between items-start">
-            <div>
-              <span class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">${item.league}</span>
-              <h4 class="font-bold text-base mt-1">${item.matchTitle}</h4>
-            </div>
-            ${item.isValue ? `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-1 rounded-full font-bold">高價值 (Value) ${Math.round(item.winRate * 100)}%</span>` : ''}
-          </div>
-          
-          <div class="bg-slate-900 p-3 rounded-lg flex justify-between items-center text-sm">
-            <div>
-              <p class="text-amber-400 font-semibold">${item.name}</p>
-              <p class="text-xs text-slate-400">AI 勝率: ${Math.round(item.winRate * 100)}% | EV: ${Math.round(item.ev * 100)}%</p>
-            </div>
-            <div class="text-right">
-              <span class="text-emerald-400 font-bold text-lg">${item.odds.toFixed(2)}</span>
-            </div>
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    }
-
-    // 頁面載入時自動執行
-    fetchRealOdds();
-  </script>
-</body>
-</html>
+      container.innerHTML = `<div class="col-span-full
