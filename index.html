@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 足球預測與模擬投注系統</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+
+  <!-- 頂部導航與個人戰績 -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50 px-4 py-3">
+    <div class="max-w-6xl mx-auto flex flex-wrap justify-between items-center gap-3">
+      <div class="flex items-center space-x-2">
+        <span class="text-2xl">⚽</span>
+        <h1 class="font-bold text-lg text-emerald-400">AI Football Vision</h1>
+      </div>
+      
+      <!-- 訪客錢包與戰績看板 -->
+      <div class="flex items-center space-x-4 bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 text-xs sm:text-sm">
+        <div>
+          <span class="text-slate-400">虛擬餘額:</span>
+          <span id="user-balance" class="font-bold text-amber-400">$10,000</span>
+        </div>
+        <div>
+          <span class="text-slate-400">勝率:</span>
+          <span id="user-winrate" class="font-bold text-emerald-400">0%</span>
+        </div>
+        <div>
+          <span class="text-slate-400">ROI:</span>
+          <span id="user-roi" class="font-bold text-cyan-400">0%</span>
+        </div>
+        <button onclick="toggleBetsModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded transition">
+          我的注單
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主內容區 -->
+  <main class="max-w-6xl mx-auto p-4 space-y-6">
+
+    <!-- 控制列：彩池選擇與動態排序 -->
+    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-wrap gap-4 justify-between items-center">
+      
+      <!-- 彩池篩選 -->
+      <div class="flex flex-wrap gap-2">
+        <button onclick="filterMarket('ALL')" class="market-btn bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-medium">全部彩池</button>
+        <button onclick="filterMarket('1X2')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">主客和</button>
+        <button onclick="filterMarket('HANDICAP')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">讓球</button>
+        <button onclick="filterMarket('OU')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">入球大細</button>
+        <button onclick="filterMarket('CORNER')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">角球彩池 🚩</button>
+      </div>
+
+      <!-- 排序選單 -->
+      <div class="flex items-center space-x-2 text-sm">
+        <label class="text-slate-400">排序方式:</label>
+        <select id="sort-select" onchange="renderMatches()" class="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none">
+          <option value="winrate-desc">AI 勝率 (由高至低)</option>
+          <option value="winrate-asc">AI 勝率 (由低至高)</option>
+          <option value="ev-desc">期望值 EV (由高至低)</option>
+          <option value="ev-asc">期望值 EV (由低至高)</option>
+          <option value="odds-desc">賠率 (由高至低)</option>
+          <option value="odds-asc">賠率 (由低至高)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 賽事卡片容器 -->
+    <div id="matches-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- 動態載入 -->
+    </div>
+
+  </main>
+
+  <!-- 模擬投注 Modal -->
+  <div id="bet-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 max-w-md w-full space-y-4">
+      <h3 class="text-lg font-bold text-emerald-400">建立模擬投注</h3>
+      <div class="space-y-2 text-sm text-slate-300">
+        <p>賽事: <span id="modal-match-title" class="text-white font-semibold"></span></p>
+        <p>選擇項目: <span id="modal-market-option" class="text-amber-400 font-semibold"></span></p>
+        <p>即時賠率: <span id="modal-odds" class="text-emerald-400 font-bold"></span></p>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">下注金額 (虛擬幣)</label>
+        <input type="number" id="bet-amount" value="500" min="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button onclick="closeBetModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">取消</button>
+        <button onclick="submitBet()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-sm font-bold">確認下注</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 我的注單 Modal -->
+  <div id="bets-list-modal" class="fixed inset-0 bg-black/70 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-5 max-w-xl w-full space-y-4 max-h-[80vh] flex flex-col">
+      <div class="flex justify-between items-center">
+        <h3 class="text-lg font-bold text-emerald-400">我的模擬投注紀錄</h3>
+        <button onclick="toggleBetsModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div id="bets-container" class="overflow-y-auto space-y-2 flex-1 text-sm">
+        <!-- 動態注單 -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const rawMatches = [
+      {
+        id: "m1", league: "德甲", home: "漢堡", away: "幕遜加柏",
+        options: [
+          { market: "CORNER", name: "角球大 [10.5]", odds: 2.15, winRate: 0.76 },
+          { market: "OU", name: "全場大 [2.5]", odds: 1.58, winRate: 0.68 },
+          { market: "1X2", name: "漢堡勝", odds: 2.32, winRate: 0.42 }
+        ]
+      },
+      {
+        id: "m2", league: "德甲", home: "拜仁慕尼黑", away: "多蒙特",
+        options: [
+          { market: "1X2", name: "拜仁慕尼黑勝", odds: 1.65, winRate: 0.78 },
+          { market: "CORNER", name: "角球主讓 [-1.5]", odds: 1.95, winRate: 0.72 },
+          { market: "HANDICAP", name: "拜仁 [-0.5/1]", odds: 1.85, winRate: 0.74 }
+        ]
+      }
+    ];
+
+    let currentMarket = 'ALL';
+    let userState = JSON.parse(localStorage.getItem('paper_wallet')) || { balance: 10000, bets: [] };
+    let selectedBetTarget = null;
+
+    function saveUserState() {
+      localStorage.setItem('paper_wallet', JSON.stringify(userState));
+      updateWalletUI();
+    }
+
+    function updateWalletUI() {
+      document.getElementById('user-balance').innerText = `$${userState.balance.toLocaleString()}`;
+      const settled = userState.bets.filter(b => b.status !== 'pending');
+      const wins = settled.filter(b => b.status === 'won').length;
+      const winRate = settled.length ? Math.round((wins / settled.length) * 100) : 0;
+      
+      const totalStaked = settled.reduce((acc, b) => acc + b.amount, 0);
+      const totalProfit = settled.reduce((acc, b) => acc + (b.profit || 0), 0);
+      const roi = totalStaked ? Math.round((totalProfit / totalStaked) * 100) : 0;
+
+      document.getElementById('user-winrate').innerText = `${winRate}%`;
+      document.getElementById('user-roi').innerText = `${roi}%`;
+    }
+
+    function filterMarket(m) {
+      currentMarket = m;
+      document.querySelectorAll('.market-btn').forEach(btn => btn.className = 'market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium');
+      event.target.className = 'market-btn bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-medium';
+      renderMatches();
+    }
+
+    function renderMatches() {
+      const container = document.getElementById('matches-container');
+      const sortType = document.getElementById('sort-select').value;
+      container.innerHTML = '';
+
+      let items = [];
+      rawMatches.forEach(m => {
+        m.options.forEach(opt => {
+          if (currentMarket === 'ALL' || opt.market === currentMarket) {
+            const ev = (opt.winRate * opt.odds) - 1;
+            const isValue = opt.winRate >= 0.70 && ev >= 0.10;
+            items.push({ ...opt, matchTitle: `${m.home} vs ${m.away}`, league: m.league, ev, isValue });
+          }
+        });
+      });
+
+      items.sort((a, b) => {
+        if (sortType === 'winrate-desc') return b.winRate - a.winRate;
+        if (sortType === 'winrate-asc') return a.winRate - b.winRate;
+        if (sortType === 'ev-desc') return b.ev - a.ev;
+        if (sortType === 'ev-asc') return a.ev - b.ev;
+        if (sortType === 'odds-desc') return b.odds - a.odds;
+        if (sortType === 'odds-asc') return a.odds - b.odds;
+      });
+
+      if (items.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">今日無高價值推薦（AI 堅持嚴選，寧缺勿濫）</div>`;
+        return;
+      }
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col justify-between space-y-3';
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded">${item.league}</span>
+              <h4 class="font-bold text-base mt-1">${item.matchTitle}</h4>
+            </div>
+            ${item.isValue ? `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-1 rounded-full font-bold">高價值 (Value) ${Math.round(item.winRate * 100)}%</span>` : ''}
+          </div>
+          
+          <div class="bg-slate-900 p-3 rounded-lg flex justify-between items-center text-sm">
+            <div>
+              <p class="text-amber-400 font-semibold">${item.name}</p>
+              <p class="text-xs text-slate-400">AI 勝率: ${Math.round(item.winRate * 100)}% | EV: ${Math.round(item.ev * 100)}%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-emerald-400 font-bold text-lg">${item.odds.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <button onclick="openBetModal('${item.matchTitle}', '${item.name}', ${item.odds})" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-medium text-sm transition">
+            模擬下注
+          </button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function openBetModal(title, opt, odds) {
+      selectedBetTarget = { title, opt, odds };
+      document.getElementById('modal-match-title').innerText = title;
+      document.getElementById('modal-market-option').innerText = opt;
+      document.getElementById('modal-odds').innerText = odds.toFixed(2);
+      document.getElementById('bet-modal').classList.remove('hidden');
+    }
+
+    function closeBetModal() {
+      document.getElementById('bet-modal').classList.add('hidden');
+    }
+
+    function submitBet() {
+      const amount = parseFloat(document.getElementById('bet-amount').value);
+      if (amount > userState.balance) {
+        alert('餘額不足！');
+        return;
+      }
+      userState.balance -= amount;
+      userState.bets.push({
+        id: Date.now(),
+        title: selectedBetTarget.title,
+        option: selectedBetTarget.opt,
+        odds: selectedBetTarget.odds,
+        amount,
+        status: 'pending'
+      });
+      saveUserState();
+      closeBetModal();
+      alert('模擬下注成功！');
+    }
+
+    function toggleBetsModal() {
+      const modal = document.getElementById('bets-list-modal');
+      modal.classList.toggle('hidden');
+      if (!modal.classList.contains('hidden')) {
+        const container = document.getElementById('bets-container');
+        container.innerHTML = userState.bets.length === 0 ? '<p class="text-slate-500 text-center py-4">尚無下注紀錄</p>' : '';
+        userState.bets.forEach(b => {
+          container.innerHTML += `
+            <div class="bg-slate-900 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+              <div>
+                <p class="font-semibold text-white">${b.title} - ${b.option}</p>
+                <p class="text-xs text-slate-400">本金: $${b.amount} | 賠率: ${b.odds}</p>
+              </div>
+              <span class="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400">進行中</span>
+            </div>
+          `;
+        });
+      }
+    }
+
+    updateWalletUI();
+    renderMatches();
+  </script>
+</body>
+</html>
