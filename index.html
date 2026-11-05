@@ -216,7 +216,7 @@
         if (sortType === 'winrate-desc') return b.winRate - a.winRate;
         if (sortType === 'winrate-asc') return a.winRate - b.winRate;
         if (sortType === 'ev-desc') return b.ev - a.ev;
-        if (sortType === 'ev-asc') return a.ev - b.ev;
+        if (sortType === 'ev-asc') return b.ev - a.ev;
         if (sortType === 'odds-desc') return b.odds - a.odds;
         if (sortType === 'odds-asc') return a.odds - b.odds;
       });
