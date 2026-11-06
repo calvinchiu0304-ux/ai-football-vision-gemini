@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 足球預測與模擬投注系統 (高價值專區版)</title>
+  <title>AI 足球預測與模擬投注系統 (動態賽事狀態版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -157,6 +157,31 @@
 
       document.getElementById('user-winrate').innerText = `${winRate}%`;
       document.getElementById('user-roi').innerText = `${roi}%`;
+    }
+
+    // 🕒 核心動態賽事狀態計算函式
+    function getMatchStatus(timestamp) {
+      const now = Date.now();
+      const diffMs = timestamp - now;
+      const diffMins = diffMs / (1000 * 60);
+      
+      const matchDate = new Date(timestamp);
+      const nowDate = new Date(now);
+
+      const isSameDay = matchDate.getFullYear() === nowDate.getFullYear() &&
+                        matchDate.getMonth() === nowDate.getMonth() &&
+                        matchDate.getDate() === nowDate.getDate();
+
+      if (diffMs < 0) {
+        return { text: "比賽進行中", class: "bg-red-500/20 text-red-400 border border-red-500/30" };
+      } else if (diffMins <= 30) {
+        return { text: "準備比賽", class: "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse" };
+      } else if (isSameDay) {
+        return { text: "今天", class: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" };
+      } else {
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        return { text: `尚有 ${diffDays} 天`, class: "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30" };
+      }
     }
 
     function formatMatchTime(isoString) {
@@ -328,24 +353,29 @@
       const month = String(today.getMonth() + 1).padStart(2, '0');
       const day = String(today.getDate()).padStart(2, '0');
       const dateKey = `${today.getFullYear()}-${month}-${day}`;
-      const timeDisplay = `${month}/${day} 22:00`;
+      
+      // 為了測試各種狀態，提供不同時間點的示範賽事
+      const now = Date.now();
 
       const mockMatches = [
-        { league: '英超 (EPL)', home: 'Liverpool', away: 'Manchester United' },
-        { league: '英超 (EPL)', home: 'Arsenal', away: 'Chelsea' },
-        { league: '德甲', home: 'Bayern Munich', away: 'Borussia Dortmund' },
-        { league: '西甲', home: 'Real Madrid', away: 'FC Barcelona' }
+        { league: '英超 (EPL)', home: 'Arsenal', away: 'Chelsea', offset: 3600000 * 5 }, // 5小時後 (今天/尚有)
+        { league: '英超 (EPL)', home: 'Liverpool', away: 'Manchester United', offset: 900000 }, // 15分鐘後 (準備比賽)
+        { league: '德甲', home: 'Bayern Munich', away: 'Borussia Dortmund', offset: -1800000 }, // 30分鐘前已開賽 (比賽進行中)
+        { league: '西甲', home: 'Real Madrid', away: 'FC Barcelona', offset: 3600000 * 48 } // 48小時後 (尚有 X 天)
       ];
 
       mockMatches.forEach((m, idx) => {
+        const matchTime = new Date(now + m.offset);
+        const timeInfo = formatMatchTime(matchTime.toISOString());
+
         realMatchesData.push({
           id: `mock_${idx}`,
           league: m.league,
           home: m.home,
           away: m.away,
-          timeDisplay: timeDisplay,
-          dateKey: dateKey,
-          timestamp: today.getTime() + idx * 3600000,
+          timeDisplay: timeInfo.formatted,
+          dateKey: timeInfo.dateKey,
+          timestamp: timeInfo.timestamp,
           options: [
             { market: '1X2', name: `${m.home} 勝`, odds: 1.75, winRate: 0.72 },
             { market: '1X2', name: `和局`, odds: 3.60, winRate: 0.25 },
@@ -362,7 +392,6 @@
     function filterMarket(m) {
       currentMarket = m;
       document.querySelectorAll('.market-btn').forEach(btn => btn.className = 'market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium');
-      // 如果點擊的是高價值專區，給予特製的高亮樣式
       if (m === 'VALUE') {
         event.target.className = 'market-btn bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold border border-amber-400 shadow-lg';
       } else {
@@ -384,9 +413,7 @@
           const ev = (opt.winRate * opt.odds) - 1;
           const isValue = opt.winRate >= 0.70 && ev >= 0.10;
           
-          // 如果當前選擇的是「高價值專區」，則只保留 isValue 為 true 的選項
           if (currentMarket === 'VALUE' && !isValue) return;
-          // 如果是一般彩池篩選
           if (currentMarket !== 'ALL' && currentMarket !== 'VALUE' && opt.market !== currentMarket) return;
 
           const matchTitle = `${m.home} vs ${m.away}`;
@@ -413,7 +440,7 @@
       });
 
       if (items.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前選擇條件下無符合賽事（若在「高價值專區」代表暫無符合勝率≥70%且EV≥10%的選項，可切換至全部彩池查看）。</div>`;
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前選擇條件下無符合賽事。</div>`;
         return;
       }
 
@@ -443,7 +470,7 @@
             </div>
           </div>
 
-          <button onclick="openBetModal('${item.matchTitle}', '${item.timeDisplay}', '${item.name}', ${item.odds}, ${item.winRate}, ${item.ev})" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-medium text-sm transition">
+          <button onclick="openBetModal('${item.matchTitle}', '${item.timeDisplay}', '${item.name}', ${item.odds}, ${item.winRate}, ${item.ev}, ${item.timestamp})" class="w-full bg-emerald-600 hover:bg-emerald-500 py-2 rounded-lg font-medium text-sm transition">
             ${item.isAlreadyBet ? '再次模擬下注 (追加)' : '模擬下注'}
           </button>
         `;
@@ -451,8 +478,8 @@
       });
     }
 
-    function openBetModal(title, time, opt, odds, winRate, ev) {
-      selectedBetTarget = { title, time, opt, odds, winRate, ev };
+    function openBetModal(title, time, opt, odds, winRate, ev, timestamp) {
+      selectedBetTarget = { title, time, opt, odds, winRate, ev, timestamp };
       document.getElementById('modal-match-title').innerText = title;
       document.getElementById('modal-match-time').innerText = time;
       document.getElementById('modal-market-option').innerText = opt;
@@ -477,6 +504,8 @@
       }
       userState.balance -= amount;
       
+      const isValue = selectedBetTarget.winRate >= 0.70 && selectedBetTarget.ev >= 0.10;
+
       userState.bets.push({
         id: Date.now(),
         title: selectedBetTarget.title,
@@ -486,6 +515,8 @@
         winRate: selectedBetTarget.winRate,
         ev: selectedBetTarget.ev,
         amount,
+        timestamp: selectedBetTarget.timestamp || Date.now() + 86400000, // 儲存時間戳以供計算狀態
+        isValue,
         status: 'pending'
       });
       
@@ -504,15 +535,24 @@
         userState.bets.forEach(b => {
           const winRatePercent = b.winRate ? Math.round(b.winRate * 100) : '-';
           const evPercent = b.ev !== undefined ? Math.round(b.ev * 100) : '-';
+          
+          const valueBadge = b.isValue ? `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold ml-2">⭐ 高價值</span>` : '';
+          
+          // 動態計算注單的賽事狀態
+          const matchStatus = getMatchStatus(b.timestamp || Date.now());
+
           container.innerHTML += `
             <div class="bg-slate-900 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
               <div>
-                <p class="font-semibold text-white">${b.title} (${b.time})</p>
-                <p class="text-xs text-amber-400 font-medium">${b.option} @ ${b.odds}</p>
+                <div class="flex items-center">
+                  <p class="font-semibold text-white">${b.title} (${b.time})</p>
+                  ${valueBadge}
+                </div>
+                <p class="text-xs text-amber-400 font-medium mt-0.5">${b.option} @ ${b.odds}</p>
                 <p class="text-xs text-cyan-300 mt-0.5">AI 勝率: ${winRatePercent}% | EV: ${evPercent}%</p>
                 <p class="text-xs text-slate-400">本金: $${b.amount}</p>
               </div>
-              <span class="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-400 font-semibold">進行中</span>
+              <span class="text-xs px-2.5 py-1 rounded font-bold ${matchStatus.class}">${matchStatus.text}</span>
             </div>
           `;
         });
