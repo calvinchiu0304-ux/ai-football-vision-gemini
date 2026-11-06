@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 足球預測與模擬投注系統 (積分優化版)</title>
+  <title>AI 足球預測與模擬投注系統 (高價值專區版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -64,6 +64,7 @@
     <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-wrap gap-4 justify-between items-center">
       <div class="flex flex-wrap gap-2">
         <button onclick="filterMarket('ALL')" class="market-btn bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-medium">全部彩池</button>
+        <button onclick="filterMarket('VALUE')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium text-amber-300 border border-amber-500/40">⭐ 高價值專區</button>
         <button onclick="filterMarket('1X2')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">主客和 (1X2)</button>
         <button onclick="filterMarket('spreads')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">亞盤讓球</button>
         <button onclick="filterMarket('totals')" class="market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium">入球大小</button>
@@ -209,28 +210,25 @@
       renderMatches();
     }
 
-    // 🛡️ 智慧快取核心：檢查 LocalStorage 是否有 30 分鐘內的資料
     async function fetchRealOdds(forceRefresh = false) {
-      const CACHE_KEY = 'odds_api_cache_v2';
-      const CACHE_TIME_KEY = 'odds_api_cache_time_v2';
-      const CACHE_DURATION = 30 * 60 * 1000; // 30 分鐘快取有效期
+      const CACHE_KEY = 'odds_api_cache_v3';
+      const CACHE_TIME_KEY = 'odds_api_cache_time_v3';
+      const CACHE_DURATION = 30 * 60 * 1000;
 
       const cachedData = localStorage.getItem(CACHE_KEY);
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
       const now = Date.now();
 
       if (!forceRefresh && cachedData && cachedTime && (now - cachedTime < CACHE_DURATION)) {
-        // 直接讀取快取，消耗 0 點積分！
         realMatchesData = JSON.parse(cachedData);
-        document.getElementById('cache-status-msg').innerText = '⚡ 已從瀏覽器快取載入 (本次更新消耗 0 積分)';
+        document.getElementById('cache-status-msg').innerText = '⚡ 已從瀏覽器快取載入 (0 積分消耗)';
         document.getElementById('cache-status-msg').className = 'text-cyan-400 font-semibold';
         renderMatches();
         return;
       }
 
-      // 如果強制更新或快取過期，才發送 API 請求
       const container = document.getElementById('matches-container');
-      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在向 The Odds API 同步最新賠率 (扣除少量積分)...</div>`;
+      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在向 The Odds API 同步最新賠率...</div>`;
       document.getElementById('cache-status-msg').innerText = '正在向伺服器同步最新賠率...';
 
       realMatchesData = [];
@@ -255,7 +253,6 @@
           loadMockFallbackData();
           document.getElementById('cache-status-msg').innerText = '🟡 聯賽暫無賽事，已啟用備用賽事展示';
         } else {
-          // 寫入快取與時間戳
           localStorage.setItem(CACHE_KEY, JSON.stringify(realMatchesData));
           localStorage.setItem(CACHE_TIME_KEY, now);
           document.getElementById('cache-status-msg').innerText = `🟢 聯賽同步成功！資料已快取 (30分鐘內重整不扣分)`;
@@ -365,7 +362,12 @@
     function filterMarket(m) {
       currentMarket = m;
       document.querySelectorAll('.market-btn').forEach(btn => btn.className = 'market-btn bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-sm font-medium');
-      event.target.className = 'market-btn bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-medium';
+      // 如果點擊的是高價值專區，給予特製的高亮樣式
+      if (m === 'VALUE') {
+        event.target.className = 'market-btn bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold border border-amber-400 shadow-lg';
+      } else {
+        event.target.className = 'market-btn bg-emerald-600 px-3 py-1.5 rounded-lg text-sm font-medium';
+      }
       renderMatches();
     }
 
@@ -379,24 +381,27 @@
         if (currentDateFilter !== 'ALL' && m.dateKey !== currentDateFilter) return;
 
         m.options.forEach(opt => {
-          if (currentMarket === 'ALL' || opt.market === currentMarket) {
-            const ev = (opt.winRate * opt.odds) - 1;
-            const isValue = opt.winRate >= 0.70 && ev >= 0.10;
-            
-            const matchTitle = `${m.home} vs ${m.away}`;
-            const isAlreadyBet = userState.bets.some(b => b.title === matchTitle && b.option === opt.name && b.status === 'pending');
+          const ev = (opt.winRate * opt.odds) - 1;
+          const isValue = opt.winRate >= 0.70 && ev >= 0.10;
+          
+          // 如果當前選擇的是「高價值專區」，則只保留 isValue 為 true 的選項
+          if (currentMarket === 'VALUE' && !isValue) return;
+          // 如果是一般彩池篩選
+          if (currentMarket !== 'ALL' && currentMarket !== 'VALUE' && opt.market !== currentMarket) return;
 
-            items.push({
-              ...opt,
-              matchTitle,
-              league: m.league,
-              timeDisplay: m.timeDisplay,
-              timestamp: m.timestamp,
-              ev,
-              isValue,
-              isAlreadyBet
-            });
-          }
+          const matchTitle = `${m.home} vs ${m.away}`;
+          const isAlreadyBet = userState.bets.some(b => b.title === matchTitle && b.option === opt.name && b.status === 'pending');
+
+          items.push({
+            ...opt,
+            matchTitle,
+            league: m.league,
+            timeDisplay: m.timeDisplay,
+            timestamp: m.timestamp,
+            ev,
+            isValue,
+            isAlreadyBet
+          });
         });
       });
 
@@ -408,7 +413,7 @@
       });
 
       if (items.length === 0) {
-        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前選擇條件下無符合賽事，請點擊上方「全部賽程」或「全部彩池」。</div>`;
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">目前選擇條件下無符合賽事（若在「高價值專區」代表暫無符合勝率≥70%且EV≥10%的選項，可切換至全部彩池查看）。</div>`;
         return;
       }
 
@@ -516,7 +521,7 @@
 
     buildDateFilterUI();
     updateWalletUI();
-    fetchRealOdds(); // 頁面載入時優先讀取快取，0 積分消耗
+    fetchRealOdds();
   </script>
 </body>
 </html>
