@@ -133,11 +133,14 @@
     let userState = JSON.parse(localStorage.getItem('paper_wallet')) || { balance: 10000, bets: [] };
     let selectedBetTarget = null;
 
+    // 已加入葡超 (soccer_portugal_primeira_liga) 與荷甲 (soccer_netherlands_eredivisie)
     const targetLeagues = [
       { key: 'soccer_epl', name: '英超 (EPL)' },
       { key: 'soccer_germany_bundesliga', name: '德甲' },
       { key: 'soccer_spain_la_liga', name: '西甲' },
-      { key: 'soccer_italy_serie_a', name: '意甲' }
+      { key: 'soccer_italy_serie_a', name: '意甲' },
+      { key: 'soccer_portugal_primeira_liga', name: '葡超' },
+      { key: 'soccer_netherlands_eredivisie', name: '荷甲' }
     ];
 
     function saveUserState() {
@@ -236,8 +239,8 @@
     }
 
     async function fetchRealOdds(forceRefresh = false) {
-      const CACHE_KEY = 'odds_api_cache_v3';
-      const CACHE_TIME_KEY = 'odds_api_cache_time_v3';
+      const CACHE_KEY = 'odds_api_cache_v4';
+      const CACHE_TIME_KEY = 'odds_api_cache_time_v4';
       const CACHE_DURATION = 30 * 60 * 1000;
 
       const cachedData = localStorage.getItem(CACHE_KEY);
@@ -253,7 +256,7 @@
       }
 
       const container = document.getElementById('matches-container');
-      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在向 The Odds API 同步最新賠率...</div>`;
+      container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400">⏳ 正在向 The Odds API 同步最新賠率 (含葡超、荷甲)...</div>`;
       document.getElementById('cache-status-msg').innerText = '正在向伺服器同步最新賠率...';
 
       realMatchesData = [];
@@ -354,14 +357,13 @@
       const day = String(today.getDate()).padStart(2, '0');
       const dateKey = `${today.getFullYear()}-${month}-${day}`;
       
-      // 為了測試各種狀態，提供不同時間點的示範賽事
       const now = Date.now();
 
       const mockMatches = [
-        { league: '英超 (EPL)', home: 'Arsenal', away: 'Chelsea', offset: 3600000 * 5 }, // 5小時後 (今天/尚有)
-        { league: '英超 (EPL)', home: 'Liverpool', away: 'Manchester United', offset: 900000 }, // 15分鐘後 (準備比賽)
-        { league: '德甲', home: 'Bayern Munich', away: 'Borussia Dortmund', offset: -1800000 }, // 30分鐘前已開賽 (比賽進行中)
-        { league: '西甲', home: 'Real Madrid', away: 'FC Barcelona', offset: 3600000 * 48 } // 48小時後 (尚有 X 天)
+        { league: '英超 (EPL)', home: 'Arsenal', away: 'Chelsea', offset: 3600000 * 5 },
+        { league: '葡超', home: 'Benfica', away: 'Porto', offset: 3600000 * 12 },
+        { league: '荷甲', home: 'PSV Eindhoven', away: 'Ajax', offset: 3600000 * 24 },
+        { league: '德甲', home: 'Bayern Munich', away: 'Borussia Dortmund', offset: -1800000 }
       ];
 
       mockMatches.forEach((m, idx) => {
@@ -515,7 +517,7 @@
         winRate: selectedBetTarget.winRate,
         ev: selectedBetTarget.ev,
         amount,
-        timestamp: selectedBetTarget.timestamp || Date.now() + 86400000, // 儲存時間戳以供計算狀態
+        timestamp: selectedBetTarget.timestamp || Date.now() + 86400000,
         isValue,
         status: 'pending'
       });
@@ -538,7 +540,6 @@
           
           const valueBadge = b.isValue ? `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold ml-2">⭐ 高價值</span>` : '';
           
-          // 動態計算注單的賽事狀態
           const matchStatus = getMatchStatus(b.timestamp || Date.now());
 
           container.innerHTML += `
